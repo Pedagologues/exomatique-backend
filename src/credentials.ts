@@ -36,7 +36,7 @@ function now() {
 
 export async function verify(token: string): Promise<boolean> {
   const v = await Accounts.findOne({ auth_token: token });
-  return v != null && (v.auth_expire || 0) <= now();
+  return v != null && (v.auth_expire || 0) > now();
 }
 
 export async function token(
