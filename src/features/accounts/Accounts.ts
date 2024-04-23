@@ -130,21 +130,17 @@ accounts_router.post("/login", async (req, res) => {
     let b = await verify(token);
 
     if (token == null || !b)
-      res.status(401).send({ message: "Could not login" });
+      res.status(400).send({ message: "Could not login" });
     else
-      res.status(201).send({
-        message: JSON.stringify({ token: token[0], expiration: token[1] }),
-      });
+      res.status(201).json({ token: token[0], expiration: token[1] });
     return;
   }
 
   let token_ = await token(username, password);
 
-  if (token_ == null) res.status(401).send({ message: "Could not login" });
+  if (token_ == null) res.status(400).send({ message: "Could not login" });
   else
-    res.status(201).send({
-      message: JSON.stringify({ token: token_[0], expiration: token_[1] }),
-    });
+    res.status(201).json({ token: token_[0], expiration: token_[1] });
 });
 
 export async function token_middleware(req:any, res:any, next:any) {

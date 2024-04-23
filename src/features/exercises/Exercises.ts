@@ -160,7 +160,6 @@ exercises_router.post("edit/visible", edition_middleware, async (req, res) => {
 exercises_router.post("/edit/raw", async (req, res) => {
   let id = req.body.id;
   let raw = req.body.raw;
-  console.log(id + " " + raw);
   let url = await modify_raw(id, raw);
   res.status(200).send({
     message: JSON.stringify({
@@ -174,7 +173,6 @@ exercises_router.post("/edit/json", edition_middleware, async (req, res) => {
   let raw = req.body.raw;
   const json = req.body as IExercise;
   json["author"] = (await tokenToId(req.body.token)) || " ";
-  console.log(json);
   await Exercise.updateOne({ _id: id }, { $set: json });
   let url = await modify_raw(id, raw);
   res.status(200).send({
@@ -210,9 +208,6 @@ exercises_router.get("/:token/:id/view/", async (req, res) => {
   let ex = await Exercise.findById(id);
   let author = ex?.author.prototype?.toHexString();
   if (author == account_id || ex?.visible || false) {
-    console.log(
-      path.join(__dirname, "..", "..", "..", "compile", id, id + ".pdf")
-    );
     res.sendFile(
       path.join(__dirname, "..", "..", "..", "compile", id, id + ".pdf")
     );
@@ -225,7 +220,6 @@ exercises_router.get("/:token/:id/json/", async (req, res) => {
   let token = req.params.token;
   let id = req.params.id;
   let ex = await Exercise.findById(id);
-  console.log(ex);
   let author = ex?.author;
   if (ex?.visible || author === (await tokenToId(token))) {
     let jsonified = ex?.toJSON() as any;
@@ -237,14 +231,12 @@ exercises_router.get("/:token/:id/json/", async (req, res) => {
 });
 
 exercises_router.get("/tags", async (req, res) => {
-  console.log("TAGS");
   let tags = (await Exercise.find())
     .filter((v) => {
       return v.tags !== undefined;
     })
     .map((v) => JSON.parse(JSON.stringify(v.tags)) as string[])
     .reduce((v, v1) => v.concat(v1), []);
-  console.log({ message: JSON.stringify({ tags: tags }) });
   res.status(200).send({ message: JSON.stringify({ tags: tags }) });
 });
 
@@ -264,8 +256,7 @@ exercises_router.get("/request/:size/:begin", async (req, res) => {
       link: "http://localhost:3002/exercises/"+v.id+"/"+v.id+".pdf", 
       tags: JSON.parse(JSON.stringify(v.tags)) as string[]
     }
-  }))
-  console.log(exercises_with_details)
+  }));
   
   res.status(200).json(exercises_with_details);
 });
