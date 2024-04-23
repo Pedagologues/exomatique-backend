@@ -37,46 +37,11 @@ app.use(function(req, res, next) {
 dotenv.config();
 const port = process.env.PORT || 3000;
 
-app.get("/", (req: Request, res: Response) => {
-  res.send("Express + TypeScript Server");
+app.get("/ping", (req: Request, res: Response) => {
+  res.status(200).send({message:"Pong"})
 });
 
 app.use('/accounts', Account)
 app.use('/exercises', Exercise)
-
-
-//app.post("/exercises", async (req, res) => {
-//  let token = req.body.token as string;
-//  let id = req.body.id as string;
-//  let b = await verify(token);
-//  if (!b) res.status(401).send({ message: "Invalid token" });
-//  else {
-//    fs.writeFileSync(path.join(__dirname, "..", "public", 'dummy.tex'), req.body.latex)
-//
-//    exec('cd public && ls && pdflatex -interaction=nonstopmode dummy.tex', (err, stdout, stderr) => {
-//      if (err) {
-//        // node couldn't execute the command
-//        return;
-//      }
-//    
-//      // the *entire* stdout and stderr (buffered)
-//      console.log(`stdout: ${stdout}`);
-//      console.log(`stderr: ${stderr}`);
-//    });
-//    
-//
-//    res.status(201).send({
-//      message: JSON.stringify({
-//        link: "http://localhost:3002/exercises?id=" + id,
-//      }),
-//    });
-//  }
-//});
-
-//app.get("/exercises", async (req, res) => {
-//  let id = Number.parseInt(req.query.id as string);
-//  res.contentType("application/pdf").sendFile(path.join(__dirname, "..", "public", 'dummy.pdf'));
-//  console.log("Worked ?")
-//});
 
 app.listen(port);
