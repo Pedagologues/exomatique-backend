@@ -112,6 +112,7 @@ erl_crash.dump
 
 .env
 keys
+compile
 
 # Generated lexer
 /src/source_lexer.erl
