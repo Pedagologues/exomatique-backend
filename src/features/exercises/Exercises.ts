@@ -315,7 +315,9 @@ exercises_router.get("/request/:size/:begin", async (req, res) => {
     exercises.map(async (v) => {
       return {
         id: v._id,
+        title: v.title,
         author: await idToPseudo(v.author as string),
+        authorId: v.author,
         link: "http://localhost:3002/exercises/" + v.id + "/" + v.id + ".pdf",
         tags: JSON.parse(JSON.stringify(v.tags)) as string[],
       };

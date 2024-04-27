@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 import createConnection from "../../database";
 import { hash, compare, sign } from "../../crypto";
-import express, { RequestHandler } from "express"
+import express, { RequestHandler } from "express";
 
 const accounts_router = express.Router();
 
@@ -36,15 +36,18 @@ function now() {
   return Math.floor(Date.now() / 1000);
 }
 
-export async function verify(token: string): Promise<boolean> {
-  const v = await Accounts.findOne({ auth_token: token });
-  return v != null && (v.auth_expire || 0) > now();
+export async function verify(token: string): Promise<[string, string, number] | undefined> {
+  const valide_token = await Accounts.findOne({ auth_token: token });
+  if(valide_token != null && (valide_token.auth_expire || 0) > now()){
+    return [token, valide_token._id.toHexString(), valide_token.auth_expire || 0];
+  }
+  return undefined;
 }
 
 export async function token(
   username: string,
   password: string
-): Promise<[string, number] | null> {
+): Promise<[string, string, number] | null> {
   const v = await Accounts.findOne({ username: username });
   if (v == null || !(await compare(password, v.password))) return null;
   if (v.auth_token == undefined || (v?.auth_expire || 0) <= now()) {
@@ -58,23 +61,25 @@ export async function token(
         },
       }
     );
-    return [token, v.auth_expire || 0];
+    return [token, v._id.toHexString(), v.auth_expire || 0];
   } else {
-    return [v.auth_token, v.auth_expire || 0];
+    return [v.auth_token, v._id.toHexString(), v.auth_expire || 0];
   }
 }
 
-export async function tokenToId(token: string) : Promise<string | undefined> {
+export async function tokenToId(token: string): Promise<string | undefined> {
   const v = await Accounts.findOne({ auth_token: token });
   return v?._id.toHexString();
 }
 
-export async function tokenToPseudo(token: string) : Promise<string | undefined> {
+export async function tokenToPseudo(
+  token: string
+): Promise<string | undefined> {
   const v = await Accounts.findOne({ auth_token: token });
   return v?.username;
 }
 
-export async function idToPseudo(id: string) : Promise<string | undefined> {
+export async function idToPseudo(id: string): Promise<string | undefined> {
   const v = await Accounts.findOne({ _id: id });
   return v?.username;
 }
@@ -97,7 +102,6 @@ export async function isUsernameAvailable(username: string): Promise<boolean> {
   const b = await Accounts.exists({ username: username });
   return b == null;
 }
-
 
 // Routing
 
@@ -127,12 +131,14 @@ accounts_router.post("/login", async (req, res) => {
 
   if (username == undefined || password == undefined) {
     let token = req.body.token as string;
-    let b = await verify(token);
+    let accountId = await tokenToId(token);
+    let data = await verify(token);
 
-    if (token == null || !b)
+    if (token == null || !data)
       res.status(400).send({ message: "Could not login" });
-    else
-      res.status(201).json({ token: token[0], expiration: token[1] });
+    else {
+      res.status(201).json({ token: data[0], id:data[1], expiration: data[1] });
+    }
     return;
   }
 
@@ -140,15 +146,17 @@ accounts_router.post("/login", async (req, res) => {
 
   if (token_ == null) res.status(400).send({ message: "Could not login" });
   else
-    res.status(201).json({ token: token_[0], expiration: token_[1] });
+    res
+      .status(201)
+      .json({ token: token_[0], id: token_[1], expiration: token_[2] });
 });
 
-export async function token_middleware(req:any, res:any, next:any) {
-  let token = req.params.token || req.body.token
-  if(!await verify(token)) {
-    res.status(401).send({message: "Invalid token"})
-    return
+export async function token_middleware(req: any, res: any, next: any) {
+  let token = req.params.token || req.body.token;
+  if (!(await verify(token))) {
+    res.status(401).send({ message: "Invalid token" });
+    return;
   }
   next();
-};
+}
 export default accounts_router;
