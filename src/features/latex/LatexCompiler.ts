@@ -40,9 +40,11 @@ export default async function latex(id: string, code: string): Promise<string> {
     let { stdout: stdout_, stderr: stderr_ } = await exec("pwd").catch(e=>console.error(e)) as IExec;
     console.log("'" + stdout_ + "'");
   }
-  let { stdout, stderr } = await exec(
+  let error;
+  let o = await exec(
     "cd compile/"+id+" && ls && pdflatex -interaction=nonstopmode " + id + ".tex"
-  ).catch(e=>console.error(e)) as IExec ;
+  ).catch(e_ => error = e_) as IExec;
+  console.log(JSON.stringify(o.stdout))
 
   return pdf_file_path.split("bibinfo-back")[1];
 }

@@ -9,6 +9,10 @@ import {
   token_middleware,
 } from "../accounts/Accounts";
 import path from "path";
+import fs from "fs";
+
+const { compileTex } = require("../latex/tex-compiler");
+const parser = require("../latex/latex-log-parser");
 
 const exercises_router = express.Router();
 
@@ -116,7 +120,6 @@ export async function modify_visible(
 
 //Routing
 exercises_router.use(express.static("compile"));
-
 exercises_router.use("/edit", edition_middleware);
 
 exercises_router.post("/:token/new", token_middleware, async (req, res) => {
@@ -174,12 +177,60 @@ exercises_router.post("/edit/json", edition_middleware, async (req, res) => {
   const json = req.body as IExercise;
   json["author"] = (await tokenToId(req.body.token)) || " ";
   await Exercise.updateOne({ _id: id }, { $set: json });
-  let url = await modify_raw(id, raw);
-  res.status(200).send({
-    message: JSON.stringify({
-      link: "http://localhost:3002/exercises" + url?.split("/compile")[1],
-    }),
-  });
+  let pathDir = path.join(__dirname, "..", "..", "..", "compile", id);
+
+  let latex_path = path.join(pathDir, id + ".tex");
+  let pdf_path = path.join(pathDir, id + ".pdf");
+
+  if (!fs.existsSync(latex_path.substring(0, latex_path.lastIndexOf("/"))))
+    fs.mkdirSync(latex_path.substring(0, latex_path.lastIndexOf("/")));
+  fs.writeFileSync(latex_path, raw);
+  let log_path = path.join(pathDir, id + ".log");
+  let pdf_link = "http://localhost:3002/exercises/" + id + "/" + id + ".pdf";
+  const data: any[] = [];
+
+  if (fs.existsSync(pdf_path)) fs.unlinkSync(pdf_path);
+
+  try {
+    compileTex(latex_path, "pdflatex")
+      .catch((error: any) => {})
+      .then((result: any) => {
+        const start = async () => {
+          const stream = fs.readFileSync(log_path, {
+            encoding: "utf8",
+          });
+
+          let result = parser
+            .latexParser()
+            .parse(stream, { ignoreDuplicates: true });
+
+          if (result.errors.length > 0) {
+            result.errors.forEach((item: any, index: any) => {
+              data.push({
+                row: --item.line,
+                text: item.message,
+                type: item.level,
+              });
+            });
+          }
+        };
+
+        start().then(function (results) {
+          res.setHeader("Content-Type", "application/json");
+          res.status(200).json({
+            annotations: data,
+            link: pdf_link,
+          });
+        });
+      });
+  } catch (err) {
+    console.log(err);
+    res.status(500).json({
+      error: err,
+    });
+
+    await Exercise.updateOne({ _id: id }, { $set: { visible: false } });
+  }
 });
 
 exercises_router.get(
@@ -220,11 +271,20 @@ exercises_router.get("/:token/:id/json/", async (req, res) => {
   let token = req.params.token;
   let id = req.params.id;
   let ex = await Exercise.findById(id);
-  let author = ex?.author;
-  if (ex?.visible || author === (await tokenToId(token))) {
+  let author = String(ex?.author || "-1");
+  let user = ((await tokenToId(token)) || "-2") as string;
+
+  let pathDir = path.join(__dirname, "..", "..", "..", "compile", id);
+
+  let pdfpath = path.join(pathDir, id + ".pdf");
+
+  if (ex?.visible || author === user) {
     let jsonified = ex?.toJSON() as any;
     jsonified.author = await tokenToPseudo(token);
-    res.status(200).send({ message: JSON.stringify(jsonified) });
+    if (fs.existsSync(pdfpath))
+      jsonified.link =
+        "http://localhost:3002/exercises/" + id + "/" + id + ".pdf";
+    res.status(200).json(jsonified);
   } else {
     res.status(401).send({ message: "No json was found" });
   }
@@ -244,20 +304,24 @@ exercises_router.get("/request/:size/:begin", async (req, res) => {
   let size = Math.min(Number.parseInt(req.params.size) || 20, 20);
   let begin = req.params.begin === "0" ? undefined : req.params.begin;
 
-  let exercises = await Exercise.find(begin ? { _id: { $gt: begin }, visible: true} : {visible: true})
-  .sort({ _id: 1 })
-  .limit(size).select({_id:1, title:1, author: 1, tags: 1});
+  let exercises = await Exercise.find(
+    begin ? { _id: { $gt: begin }, visible: true } : { visible: true }
+  )
+    .sort({ _id: 1 })
+    .limit(size)
+    .select({ _id: 1, title: 1, author: 1, tags: 1 });
 
+  let exercises_with_details = await Promise.all(
+    exercises.map(async (v) => {
+      return {
+        id: v._id,
+        author: await idToPseudo(v.author as string),
+        link: "http://localhost:3002/exercises/" + v.id + "/" + v.id + ".pdf",
+        tags: JSON.parse(JSON.stringify(v.tags)) as string[],
+      };
+    })
+  );
 
-  let exercises_with_details = await Promise.all(exercises.map(async v=>{
-    return {
-      id: v._id,
-      author : await idToPseudo(v.author as string),
-      link: "http://localhost:3002/exercises/"+v.id+"/"+v.id+".pdf", 
-      tags: JSON.parse(JSON.stringify(v.tags)) as string[]
-    }
-  }));
-  
   res.status(200).json(exercises_with_details);
 });
 
