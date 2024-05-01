@@ -1,6 +1,5 @@
-import mongoose, { Types } from "mongoose";
+import mongoose, { QueryWithHelpers, Types } from "mongoose";
 import createConnection from "../../database";
-import latex from "../latex/LatexCompiler";
 import express from "express";
 import {
   idToPseudo,
@@ -9,7 +8,9 @@ import {
   token_middleware,
 } from "../accounts/Accounts";
 import path from "path";
-import fs from "fs";
+import fs, { unlinkSync } from "fs";
+
+const raw = fs.readFileSync("./public/default_latex.tex");
 
 const { compileTex } = require("../latex/tex-compiler");
 const parser = require("../latex/latex-log-parser");
@@ -17,6 +18,42 @@ const parser = require("../latex/latex-log-parser");
 const exercises_router = express.Router();
 
 const connection = createConnection();
+
+function custom_parser(raw: string): any[] {
+  let begin_document_index = raw.indexOf("\\begin{document}");
+  if (begin_document_index === -1) return []; //Managed by latex parser
+
+  let header = raw.substring(0, begin_document_index);
+
+  let error: any[] = [];
+
+  let correction_mode = header.indexOf("\\newif\\ifcorrection");
+
+  if (correction_mode === -1) {
+    error.push({
+      row: header.split("\n").length - 2,
+      text: "Missing \\newif\\ifcorrection",
+      type: "error",
+    });
+  }
+
+  let setting_correction = header.indexOf("\\correctiontrue");
+
+  while (setting_correction !== -1) {
+    error.push({
+      row: header.substring(0, setting_correction).split("\n").length - 1,
+      text: "Setting \\ifcorrection manually",
+      type: "error",
+    });
+
+    setting_correction = header.indexOf(
+      "\\correctiontrue",
+      setting_correction + "\\correctiontrue".length - 1
+    );
+  }
+
+  return error;
+}
 
 interface IExercise {
   title: string;
@@ -74,21 +111,11 @@ export async function create_empty(author: string): Promise<string> {
   let ex = await Exercise.create({
     title: "Default title",
     author: author,
-    raw: "% Hi !",
+    raw: raw,
     visible: false,
   });
 
   return ex._id.toHexString();
-}
-
-export async function modify_raw(
-  id: string,
-  code: string
-): Promise<string | null> {
-  let ex = await Exercise.updateOne({ _id: id }, { $set: { raw: code } });
-  if (ex.matchedCount == 0) return null;
-
-  return latex(id, code);
 }
 
 export async function modify_title(
@@ -160,20 +187,9 @@ exercises_router.post("edit/visible", edition_middleware, async (req, res) => {
   else res.status(401).send({ message: "An error occured" });
 });
 
-exercises_router.post("/edit/raw", async (req, res) => {
-  let id = req.body.id;
-  let raw = req.body.raw;
-  let url = await modify_raw(id, raw);
-  res.status(200).send({
-    message: JSON.stringify({
-      link: "http://localhost:3002/exercises" + url?.split("/compile")[1],
-    }),
-  });
-});
-
 exercises_router.post("/edit/json", edition_middleware, async (req, res) => {
   let id = req.body.id;
-  let raw = req.body.raw;
+  let raw: string = req.body.raw;
   const json = req.body as IExercise;
   json["author"] = (await tokenToId(req.body.token)) || " ";
   await Exercise.updateOne({ _id: id }, { $set: json });
@@ -192,7 +208,7 @@ exercises_router.post("/edit/json", edition_middleware, async (req, res) => {
   if (fs.existsSync(pdf_path)) fs.unlinkSync(pdf_path);
 
   try {
-    compileTex(latex_path, "pdflatex")
+    compileTex(latex_path)
       .catch((error: any) => {})
       .then((result: any) => {
         const start = async () => {
@@ -212,6 +228,44 @@ exercises_router.post("/edit/json", edition_middleware, async (req, res) => {
                 type: item.level,
               });
             });
+          }
+
+          let errors = custom_parser(raw);
+
+          if (errors.length > 0) {
+            console.log(errors);
+            data.push(...errors);
+            unlinkSync(pdf_path);
+          } else if (result.errors.length == 0) {
+            let correction_path = path.join(pathDir, id + "_correction.tex");
+            let log_path = path.join(pathDir, id + "_correction.log");
+            let correction_raw = raw.replace(
+              "\\newif\\ifcorrection",
+              "\\newif\\ifcorrection\n\\correctiontrue"
+            );
+            fs.writeFileSync(correction_path, correction_raw);
+            await compileTex(correction_path)
+              .catch((error2: any) => {})
+              .then((result2: any) => {
+                const stream = fs.readFileSync(log_path, {
+                  encoding: "utf8",
+                });
+
+                let result = parser
+                  .latexParser()
+                  .parse(stream, { ignoreDuplicates: true });
+
+                if (result.errors.length > 0) {
+                  unlinkSync(pdf_path);
+                  result.errors.forEach((item: any, index: any) => {
+                    data.push({
+                      row: item.line - 2,
+                      text: item.message,
+                      type: item.level,
+                    });
+                  });
+                }
+              });
           }
         };
 
@@ -300,19 +354,51 @@ exercises_router.get("/tags", async (req, res) => {
   res.status(200).send({ message: JSON.stringify({ tags: tags }) });
 });
 
-exercises_router.get("/request/:size/:begin", async (req, res) => {
-  let size = Math.min(Number.parseInt(req.params.size) || 20, 20);
-  let begin = req.params.begin === "0" ? undefined : req.params.begin;
+interface IFilter {
+  query: string;
+  tags: string[];
+}
 
-  let exercises = await Exercise.find(
-    begin ? { _id: { $gt: begin }, visible: true } : { visible: true }
-  )
+function escapeRegExp(text: string) {
+  return text.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
+}
+
+exercises_router.post("/request/:begin/:end", async (req, res) => {
+  console.log(req.body);
+  let begin = Number.parseInt(req.body.begin);
+  let end = Number.parseInt(req.body.end);
+  let viewer: string | undefined = req.body.viewer
+  if(viewer !== undefined) viewer = await tokenToId(viewer);
+  end = Math.min(end - begin, 20) + begin;
+
+  let filter = req.body as IFilter;
+  let exercises: QueryWithHelpers<Array<any>, any, any, any, "find">;
+  let exercises2: QueryWithHelpers<Array<any>, any, any, any, "find">;
+
+  let regexp = new RegExp("" + escapeRegExp(filter.query) + "", "");
+  let filter_object : any = {title: { $regex: regexp }};
+  if(filter.tags.length > 0){
+    filter_object.tags = { $all: filter.tags };
+  }
+
+  if(viewer !== undefined) {
+    filter_object.author = viewer;
+  }else{
+    filter_object.visible = true;
+  }
+
+
+  exercises = Exercise.find(filter_object);
+  exercises2 = Exercise.find(filter_object);
+
+  let count = await exercises2.countDocuments();
+  exercises = await exercises
     .sort({ _id: 1 })
-    .limit(size)
-    .select({ _id: 1, title: 1, author: 1, tags: 1 });
+    .skip(begin)
+    .limit(end - begin);
 
   let exercises_with_details = await Promise.all(
-    exercises.map(async (v) => {
+    exercises.map(async (v: any) => {
       return {
         id: v._id,
         title: v.title,
@@ -324,7 +410,7 @@ exercises_router.get("/request/:size/:begin", async (req, res) => {
     })
   );
 
-  res.status(200).json(exercises_with_details);
+  res.status(200).json({ count: count, exercises: exercises_with_details });
 });
 
 export default exercises_router;

@@ -20,8 +20,8 @@ function compileTex(file, engine, runs) {
       parsedFile.dir,
       path.basename(file, path.extname(file)) + ".pdf"
     ),
-    defaultOptions = ["-interaction=nonstopmode"];
-  engine = engine || "pdflatex";
+    defaultOptions = ["-f", "-interaction=nonstopmode", "-shell-escape"];
+  engine = engine || "latexmk";
 
   if (Array.isArray(engine)) {
     runs = engine;
@@ -32,7 +32,7 @@ function compileTex(file, engine, runs) {
     runs = [
       {
         runs: 1,
-        options: defaultOptions,//.concat(["-draftmode"]),
+        options: defaultOptions, //.concat(["-draftmode"]),
       },
       {
         runs: 2,
@@ -67,7 +67,6 @@ function compileTex(file, engine, runs) {
       });
       texSpawn.on("error", function (data) {
         console.log("error: " + data);
-        reject(data);
       });
       texSpawn.on("exit", function (data) {});
       texSpawn.on("close", function (code) {

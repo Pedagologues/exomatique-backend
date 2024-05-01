@@ -1,0 +1,109 @@
+\documentclass{article}
+
+% Language setting
+% Replace `english' with e.g. `spanish' to change the document language
+\usepackage[english]{babel}
+
+% Set page size and margins
+% Replace `letterpaper' with `a4paper' for UK/EU standard size
+\usepackage[letterpaper,top=2cm,bottom=2cm,left=3cm,right=3cm,marginparwidth=1.75cm]{geometry}
+
+% Useful packages
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{graphicx}
+\usepackage{stmaryrd}
+\usepackage{nicematrix}
+\usepackage{ifthen}
+\usepackage{minted}
+\usepackage[colorlinks=true, allcolors=blue]{hyperref}
+
+% DO NOT REMOVE THIS LINE
+\newif\ifcorrection
+
+\begin{document}
+
+\section{Programmation dynamique}
+
+\subsection{Triangle de Pascal}
+
+L'objectif de cet exercice est de calculer le coefficient binomial $\forall n \in \mathbb{N}, \forall k \in \llbracket 0; n \rrbracket \quad \binom{n}{k}$.
+\begin{enumerate}
+    \item Donner les valeurs de $\forall n \in \mathbb{N}, \binom{n}{n}$ et $\binom{n}{0}$.
+    \item Rappeler la formule du triangle de Pascal.
+    \item Proposer un algorithme récursif permettant de calculer le coefficient binomial $\binom{n}{k}$.
+    \item Déterminer la complexité de votre algorithme. Exposer un problème de l'algorithme récursif.
+    \item Proposer un algorithme de programmation dynamique permettant de déterminer $\forall n \in \mathbb{N}, \forall k \in \llbracket 0; n \rrbracket \binom{n}{k}$
+    \item Donner la complexité temporelle et spatiale de votre algorithme.
+\end{enumerate}
+
+
+% Example on how to show a part only in correction mode
+\ifcorrection
+\subsection*{Correction : Triangle de Pascal}
+\begin{enumerate}
+    \item {
+\begin{minted}[samepage]{c}
+int binom(int n, int k){
+    if(n == 0) return 1;
+    if(k == 0 || k == n) return 1;
+    return binom(n-1, k) + binom(n-1, k+1);
+}
+\end{minted}
+    }
+    \item $\forall n \in \mathbb{N}, \binom{n}{0} = \binom{n}{n} = 1$
+    \item $\forall n \in \mathbb{N}, \forall k \in \llbracket 0; n \rrbracket, \binom{n}{k} = \binom{n}{k} + \binom{n}{k-1}$
+    \item {
+    \item {
+    On cherche à déterminer la complexité temporelle de notre algorithme, on se concentre sur le nombre d'additions faîtes pour atteindre l'étape $(n, k)$. On note cette quantité $c(n, k)$.
+
+    D'après la formule de récurrence on a dans le pire cas :
+    \begin{equation*} \label{}
+    \begin{split}
+        c(n, k) & = c(n-1, k) + c(n-1, k-1) + 1 \\
+                & \leq 2 \times c(n-1, k) + 1
+    \end{split}
+    \end{equation*}
+
+    Pour justifier l'inégalité on rappelle que l'on s'intéresse à la complexité pire cas et que dans le pire des cas le calcul s'arrête quand $n = 0$. On peut s'intéresser uniquement à $n$ et ainsi écrire $c_n = 2 * c_{n-1} + 1$.
+
+    On rappelle que le $+1$ correspond aux opérations élémentaires réalisés à chaque étape, c'est donc un ordre de grandeur (on pourrait discuter longtemps du fait que l'on ne fait pas une unique opération élémentaire à chaque étape mais cela ne nous intérresse pas vraiment)
+
+    On cherche alors l'expression générale d'une suite arithmético-géométrique : 
+    
+    \begin{equation*} \label{}
+    \begin{split}
+      c_n & = 2 * c_{n-1} + 1 \\
+      - l & = 2*l + 1 \implies l = -1 \\
+      c_n + 1 &= 2*c_{n-1} + 2 = 2*(c_{n-1} + 1) = 2^n (c_0 + 1)
+    \end{split}
+    \end{equation*}
+
+    On obtient ainsi que la complexité temporelle est en $\mathcal{O}(c_n) = \mathcal{O}(2^n)$. Le problème de l'algorithme récursif c'est que de nombreuses valeurs sont calculés plusieurs fois.
+    }
+\begin{minted}[samepage]{c}
+int binom(int n, int k){
+    int memory[n][n];
+
+    for(int i = 0; i < n; i++) memory[i][0] = memory[i][i] = 1
+
+    for(int i = 1; i < n; i++){
+        for(int j = 1; j < i-1; j++){
+            memory[i][j] = memory[i-1][j] + memory[i-1][j-1];
+        }
+    }
+
+    return memory[n][k]
+}
+\end{minted}
+    }
+
+    \item{
+        On effectue un calcul par case de notre tableau \verb|memory|, le tableaux possède $n^2$ cases. La complexité temporelle et spatiale de notre algorithme est donc en $\mathcal{O}(n^2)$
+    }
+\end{enumerate}
+
+
+\fi
+
+\end{document}
