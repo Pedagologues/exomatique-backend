@@ -6,10 +6,19 @@ import Exercise from "./features/exercises/Exercises"
 
 const app: Express = express();
 
+
+
+dotenv.config();
+const USE_WHITELIST = process.env.USE_WHITELIST || true;
 var whitelist = ['http://localhost:3000']
+
 var corsOptions : CorsOptions = {
   origin: function (origin, callback) {
-    callback(null, true)
+    if (!USE_WHITELIST || whitelist.indexOf(origin as string) !== -1 || !origin) {
+      callback(null, true)
+    } else {
+      callback(new Error('Not allowed by CORS'))
+    }
   }
 }
 
@@ -28,7 +37,6 @@ app.use(function(req, res, next) {
 
   next();
 });
-dotenv.config();
 const port = process.env.PORT || 3000;
 
 app.get("/ping", (req: Request, res: Response) => {
