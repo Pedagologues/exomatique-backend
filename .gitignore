@@ -78,6 +78,7 @@ tags
 /db
 /deps
 /*.ez
+/dist
 
 /priv/static
 /priv/plts
