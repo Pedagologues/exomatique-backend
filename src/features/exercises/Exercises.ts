@@ -9,6 +9,7 @@ import {
 } from "../accounts/Accounts";
 import path from "path";
 import fs, { unlinkSync } from "fs";
+import { get_link } from "../../util";
 
 const raw = fs.readFileSync("./public/default_latex.tex");
 
@@ -202,7 +203,7 @@ exercises_router.post("/edit/json", edition_middleware, async (req, res) => {
     fs.mkdirSync(latex_path.substring(0, latex_path.lastIndexOf("/")));
   fs.writeFileSync(latex_path, raw);
   let log_path = path.join(pathDir, id + ".log");
-  let pdf_link = "http://localhost:3002/exercises/" + id + "/" + id + ".pdf";
+  let pdf_link = get_link("exercises", id, id + ".pdf");
   const data: any[] = [];
 
   if (fs.existsSync(pdf_path)) fs.unlinkSync(pdf_path);
@@ -336,8 +337,7 @@ exercises_router.get("/:token/:id/json/", async (req, res) => {
     let jsonified = ex?.toJSON() as any;
     jsonified.author = await tokenToPseudo(token);
     if (fs.existsSync(pdfpath))
-      jsonified.link =
-        "http://localhost:3002/exercises/" + id + "/" + id + ".pdf";
+      jsonified.link = get_link("exercises", id, id + ".pdf");
     res.status(200).json(jsonified);
   } else {
     res.status(401).send({ message: "No json was found" });
@@ -367,8 +367,8 @@ exercises_router.post("/request/:begin/:end", async (req, res) => {
   console.log(req.body);
   let begin = Number.parseInt(req.body.begin);
   let end = Number.parseInt(req.body.end);
-  let viewer: string | undefined = req.body.viewer
-  if(viewer !== undefined) viewer = await tokenToId(viewer);
+  let viewer: string | undefined = req.body.viewer;
+  if (viewer !== undefined) viewer = await tokenToId(viewer);
   end = Math.min(end - begin, 20) + begin;
 
   let filter = req.body as IFilter;
@@ -376,17 +376,16 @@ exercises_router.post("/request/:begin/:end", async (req, res) => {
   let exercises2: QueryWithHelpers<Array<any>, any, any, any, "find">;
 
   let regexp = new RegExp("" + escapeRegExp(filter.query) + "", "");
-  let filter_object : any = {title: { $regex: regexp }};
-  if(filter.tags.length > 0){
+  let filter_object: any = { title: { $regex: regexp } };
+  if (filter.tags.length > 0) {
     filter_object.tags = { $all: filter.tags };
   }
 
-  if(viewer !== undefined) {
+  if (viewer !== undefined) {
     filter_object.author = viewer;
-  }else{
+  } else {
     filter_object.visible = true;
   }
-
 
   exercises = Exercise.find(filter_object);
   exercises2 = Exercise.find(filter_object);
@@ -404,7 +403,7 @@ exercises_router.post("/request/:begin/:end", async (req, res) => {
         title: v.title,
         author: await idToPseudo(v.author as string),
         authorId: v.author,
-        link: "http://localhost:3002/exercises/" + v.id + "/" + v.id + ".pdf",
+        link: get_link("exercises", v.id, v.id + ".pdf"),
         tags: JSON.parse(JSON.stringify(v.tags)) as string[],
       };
     })
