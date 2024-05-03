@@ -15,6 +15,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use("/", express.static("public"));
 
+app.use("*", cors())
 app.use(function(req, res, next) {
   res.header('Access-Control-Allow-Origin', CORS); //replace localhost with actual host
   res.header('Access-Control-Allow-Methods', 'OPTIONS, GET, PUT, PATCH, POST, DELETE');
