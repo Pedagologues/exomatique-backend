@@ -7,17 +7,17 @@ import Exercise from "./features/exercises/Exercises"
 const app: Express = express();
 
 
+
 dotenv.config();
 
-const CORS = process.env.CORS_ORIGIN || "http://localhost:3000";
-
+app.use(cors());
+app.options("*", cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use("/", express.static("public"));
 
-app.use("*", cors())
 app.use(function(req, res, next) {
-  res.header('Access-Control-Allow-Origin', CORS); //replace localhost with actual host
+  res.header('Access-Control-Allow-Origin', '*'); //replace localhost with actual host
   res.header('Access-Control-Allow-Methods', 'OPTIONS, GET, PUT, PATCH, POST, DELETE');
   res.header('Access-Control-Allow-Headers', 'Content-Type, X-Requested-With, Authorization, range');
   res.header('Access-Control-Expose-Headers', "content-range, content-length, accept-ranges")
