@@ -9,7 +9,7 @@ import {
 } from "../accounts/Accounts";
 import path from "path";
 import fs, { unlinkSync } from "fs";
-import { get_link } from "../../util";
+import { time } from "console";
 
 const raw = fs.readFileSync("./public/default_latex.tex");
 
@@ -86,6 +86,10 @@ const Exercise = connection.model(
       type: Boolean,
       required: true,
     },
+    markForRemoval: {
+      type: Number,
+      required: false,
+    },
   })
 );
 
@@ -100,6 +104,7 @@ export async function edition_middleware(req: any, res: any, next: any) {
     if (account_id == undefined) return;
     let ex = await Exercise.findById(id);
     let author = ex?.author;
+
     if (author == account_id) {
       next();
     } else {
@@ -146,9 +151,38 @@ export async function modify_visible(
   return ex.modifiedCount > 0;
 }
 
+function pdf_view_link(id: string): string {
+  return "http://localhost:3002/exercises/view/" + id;
+}
+
 //Routing
-exercises_router.use(express.static("compile"));
 exercises_router.use("/edit", edition_middleware);
+
+exercises_router.get("/view/:id", async (req, res) => {
+  let id: string = req.params.id;
+  let ex = await Exercise.findById(id);
+
+  if (!ex) {
+    return res.sendStatus(404);
+  }
+
+  if (!ex?.visible) {
+    let token: string = req.body.token;
+    let account = (await tokenToId(token)) || "";
+    if (account !== ex?.author) return res.sendStatus(401);
+  }
+
+  let pathDir = path.join(__dirname, "..", "..", "..", "compile", id);
+  let latex_path = path.join(pathDir, id + ".tex");
+  if (!fs.existsSync(latex_path)) {
+    // Latex was not buit locally
+    if (!fs.existsSync(pathDir)) fs.mkdirSync(pathDir, { recursive: true });
+    fs.writeFileSync(latex_path, ex.raw);
+    await compileTex(latex_path);
+  }
+  let pdf_path = path.join(pathDir, id + ".pdf");
+  res.sendFile(pdf_path);
+});
 
 exercises_router.post("/:token/new", token_middleware, async (req, res) => {
   let token = req.params.token as string;
@@ -179,13 +213,33 @@ exercises_router.post("/edit/tags", edition_middleware, async (req, res) => {
   else res.status(401).send({ message: "An error occured" });
 });
 
-exercises_router.post("edit/visible", edition_middleware, async (req, res) => {
+exercises_router.post("/edit/visible", edition_middleware, async (req, res) => {
   let id = req.body.id;
   let token = req.body.token;
   let visible = req.body.visible === "true";
   let b = await modify_visible(id, visible);
   if (b) res.status(200).send({ message: "Ok" });
   else res.status(401).send({ message: "An error occured" });
+});
+
+exercises_router.post("/edit/remove", edition_middleware, async (req, res) => {
+  let id = req.body.id;
+  await Exercise.updateOne(
+    { _id: id },
+    { $set: { markForRemoval: Date.now() } }
+  );
+
+  res.status(201).send();
+});
+
+exercises_router.post("/edit/restore", edition_middleware, async (req, res) => {
+  let id = req.body.id;
+  await Exercise.updateOne(
+    { _id: id },
+    { $unset: { markForRemoval: ""} }
+  );
+
+  res.status(201).send();
 });
 
 exercises_router.post("/edit/json", edition_middleware, async (req, res) => {
@@ -203,7 +257,7 @@ exercises_router.post("/edit/json", edition_middleware, async (req, res) => {
     fs.mkdirSync(latex_path.substring(0, latex_path.lastIndexOf("/")));
   fs.writeFileSync(latex_path, raw);
   let log_path = path.join(pathDir, id + ".log");
-  let pdf_link = get_link("exercises", id, id + ".pdf");
+  let pdf_link = "http://localhost:3002/exercises/" + id + "/" + id + ".pdf";
   const data: any[] = [];
 
   if (fs.existsSync(pdf_path)) fs.unlinkSync(pdf_path);
@@ -234,7 +288,6 @@ exercises_router.post("/edit/json", edition_middleware, async (req, res) => {
           let errors = custom_parser(raw);
 
           if (errors.length > 0) {
-            console.log(errors);
             data.push(...errors);
             unlinkSync(pdf_path);
           } else if (result.errors.length == 0) {
@@ -336,8 +389,7 @@ exercises_router.get("/:token/:id/json/", async (req, res) => {
   if (ex?.visible || author === user) {
     let jsonified = ex?.toJSON() as any;
     jsonified.author = await tokenToPseudo(token);
-    if (fs.existsSync(pdfpath))
-      jsonified.link = get_link("exercises", id, id + ".pdf");
+    if (fs.existsSync(pdfpath)) jsonified.link = pdf_view_link(id);
     res.status(200).json(jsonified);
   } else {
     res.status(401).send({ message: "No json was found" });
@@ -364,7 +416,6 @@ function escapeRegExp(text: string) {
 }
 
 exercises_router.post("/request/:begin/:end", async (req, res) => {
-  console.log(req.body);
   let begin = Number.parseInt(req.body.begin);
   let end = Number.parseInt(req.body.end);
   let viewer: string | undefined = req.body.viewer;
@@ -385,6 +436,7 @@ exercises_router.post("/request/:begin/:end", async (req, res) => {
     filter_object.author = viewer;
   } else {
     filter_object.visible = true;
+    filter_object.markForRemoval = undefined;
   }
 
   exercises = Exercise.find(filter_object);
@@ -403,8 +455,9 @@ exercises_router.post("/request/:begin/:end", async (req, res) => {
         title: v.title,
         author: await idToPseudo(v.author as string),
         authorId: v.author,
-        link: get_link("exercises", v.id, v.id + ".pdf"),
+        link: pdf_view_link(v.id),
         tags: JSON.parse(JSON.stringify(v.tags)) as string[],
+        removed: v.markForRemoval !== undefined,
       };
     })
   );
