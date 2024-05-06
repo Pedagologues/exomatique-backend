@@ -158,21 +158,26 @@ function pdf_view_link(id: string): string {
 //Routing
 exercises_router.use("/edit", edition_middleware);
 
-exercises_router.get("/view/:id", async (req, res) => {
-  let id: string = req.params.id;
-  let ex = await Exercise.findById(id);
+exercises_router.post("/view/:id", async (req, res) => {
+  let ex_id: string = req.params.id;
+  if(ex_id.endsWith("_correction")) ex_id = ex_id.substring(0, ex_id.lastIndexOf("_correction"));
 
+  let id : string = req.params.id;
+
+  console.log(ex_id+" "+id)
+  let ex = await Exercise.findById(ex_id);
   if (!ex) {
     return res.sendStatus(404);
   }
 
   if (!ex?.visible) {
     let token: string = req.body.token;
-    let account = (await tokenToId(token)) || "";
-    if (account !== ex?.author) return res.sendStatus(401);
+    let account = String(await tokenToId(token)) || "";
+
+    if (account !== String(ex?.author)) return res.sendStatus(401);
   }
 
-  let pathDir = path.join(__dirname, "..", "..", "..", "compile", id);
+  let pathDir = path.join(__dirname, "..", "..", "..", "compile", ex_id);
   let latex_path = path.join(pathDir, id + ".tex");
   if (!fs.existsSync(latex_path)) {
     // Latex was not buit locally
@@ -184,17 +189,17 @@ exercises_router.get("/view/:id", async (req, res) => {
   res.sendFile(pdf_path);
 });
 
-exercises_router.post("/:token/new", token_middleware, async (req, res) => {
-  let token = req.params.token as string;
+exercises_router.post("/new", token_middleware, async (req, res) => {
+  let token = req.body.token as string;
   let authorId = await tokenToId(token);
   if (authorId === undefined) {
     res
       .status(401)
-      .send({ message: "Could not find you in the user database" });
+      .json({ message: "Could not find you in the user database" });
     return;
   }
   let exercise = await create_empty(authorId);
-  res.status(200).send({ message: JSON.stringify({ id: exercise }) });
+  res.status(200).json({ id: exercise });
 });
 
 exercises_router.post("/edit/title/", edition_middleware, async (req, res) => {
@@ -234,10 +239,7 @@ exercises_router.post("/edit/remove", edition_middleware, async (req, res) => {
 
 exercises_router.post("/edit/restore", edition_middleware, async (req, res) => {
   let id = req.body.id;
-  await Exercise.updateOne(
-    { _id: id },
-    { $unset: { markForRemoval: ""} }
-  );
+  await Exercise.updateOne({ _id: id }, { $unset: { markForRemoval: "" } });
 
   res.status(201).send();
 });
@@ -257,7 +259,7 @@ exercises_router.post("/edit/json", edition_middleware, async (req, res) => {
     fs.mkdirSync(latex_path.substring(0, latex_path.lastIndexOf("/")));
   fs.writeFileSync(latex_path, raw);
   let log_path = path.join(pathDir, id + ".log");
-  let pdf_link = "http://localhost:3002/exercises/" + id + "/" + id + ".pdf";
+  let pdf_link = pdf_view_link(id);
   const data: any[] = [];
 
   if (fs.existsSync(pdf_path)) fs.unlinkSync(pdf_path);
