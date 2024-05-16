@@ -151,8 +151,16 @@ export async function modify_visible(
   return ex.modifiedCount > 0;
 }
 
+
+import dotenv from "dotenv";
+dotenv.config();
+const protocol = process.env.PROTOCOL || "http";
+const port = process.env.PORT || 3000;
+const hostname = process.env.HOSTNAME || "localhost";
+
+
 function pdf_view_link(id: string): string {
-  return "http://localhost:3002/exercises/view/" + id;
+  return protocol+"://"+hostname+":"+String(port)+"/exercises/view/" + id;
 }
 
 //Routing
