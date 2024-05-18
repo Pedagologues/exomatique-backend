@@ -151,16 +151,21 @@ export async function modify_visible(
   return ex.modifiedCount > 0;
 }
 
-
 import dotenv from "dotenv";
 dotenv.config();
 const protocol = process.env.PROTOCOL || "http";
-const port = process.env.PORT || 3000;
+const port = process.env.EFFECTIVE_PORT || process.env.PORT || 3000;
 const hostname = process.env.HOSTNAME || "localhost";
 
-
 function pdf_view_link(id: string): string {
-  return protocol+"://"+hostname+":"+String(port)+"/exercises/view/" + id;
+  return (
+    protocol +
+    "://" +
+    hostname +
+    (String(port) !== "0" ? ":" + String(port) : "") +
+    "/exercises/view/" +
+    id
+  );
 }
 
 //Routing
@@ -168,11 +173,12 @@ exercises_router.use("/edit", edition_middleware);
 
 exercises_router.post("/view/:id", async (req, res) => {
   let ex_id: string = req.params.id;
-  if(ex_id.endsWith("_correction")) ex_id = ex_id.substring(0, ex_id.lastIndexOf("_correction"));
+  if (ex_id.endsWith("_correction"))
+    ex_id = ex_id.substring(0, ex_id.lastIndexOf("_correction"));
 
-  let id : string = req.params.id;
+  let id: string = req.params.id;
 
-  console.log(ex_id+" "+id)
+  console.log(ex_id + " " + id);
   let ex = await Exercise.findById(ex_id);
   if (!ex) {
     return res.sendStatus(404);
