@@ -192,15 +192,37 @@ exercises_router.post("/view/:id", async (req, res) => {
   }
 
   let pathDir = path.join(__dirname, "..", "..", "..", "compile", ex_id);
-  let latex_path = path.join(pathDir, id + ".tex");
+  let latex_path = path.join(pathDir, ex_id + ".tex");
+
+  let build = false;
+
   if (!fs.existsSync(latex_path)) {
+    build = true;
     // Latex was not buit locally
     if (!fs.existsSync(pathDir)) fs.mkdirSync(pathDir, { recursive: true });
     fs.writeFileSync(latex_path, ex.raw);
-    await compileTex(latex_path);
+    compileTex(latex_path);
   }
+
+  let correction_path = path.join(pathDir, id + "_correction.tex");
+  if (!fs.existsSync(correction_path)) {
+    build = true;
+    let correction_raw = ex.raw.replace(
+      "\\newif\\ifcorrection",
+      "\\newif\\ifcorrection\n\\correctiontrue"
+    );
+    fs.writeFileSync(correction_path, correction_raw);
+    compileTex(correction_path);
+  }
+
   let pdf_path = path.join(pathDir, id + ".pdf");
-  res.sendFile(pdf_path);
+  if (build) {
+    res.status(202).json({ name: "Hi" }).send();
+  } else if (fs.existsSync(pdf_path)) {
+    res.sendFile(pdf_path);
+  } else {
+    res.sendStatus(404).send();
+  }
 });
 
 exercises_router.post("/new", token_middleware, async (req, res) => {
