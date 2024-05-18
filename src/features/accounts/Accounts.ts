@@ -119,9 +119,8 @@ accounts_router.post("/register", async (req, res) => {
     else res.status(401).send({ message: "A problem occured" });
   }
   console.log(
-    "Someone is trying to register a new user : '%s', with password '%s'",
-    username,
-    password
+    "Someone is trying to register a new user : '%s'",
+    username
   );
 });
 
