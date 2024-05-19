@@ -228,7 +228,7 @@ exercises_router.post("/view/:id", async (req, res) => {
 exercises_router.post("/new", token_middleware, async (req, res) => {
   let token = req.body.token as string;
   let authorId = await tokenToId(token);
-  if (authorId === undefined) {
+  if (token === undefined || authorId === undefined) {
     res
       .status(401)
       .json({ message: "Could not find you in the user database" });

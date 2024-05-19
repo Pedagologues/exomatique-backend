@@ -112,6 +112,7 @@ erl_crash.dump
 .elixir_ls/
 
 .env
+sslcert
 keys
 compile
 
