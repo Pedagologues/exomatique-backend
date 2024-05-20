@@ -41,6 +41,7 @@ app.use("/accounts", Account);
 app.use("/exercises", Exercise);
 
 var env = process.env.NODE_ENV || "development";
+console.log("Running in %s mode", env)
 if (env === "development") {
   var fs = require('fs');
   var https = require("https");

@@ -442,6 +442,7 @@ exercises_router.get("/tags", async (req, res) => {
     .map((v) => JSON.parse(JSON.stringify(v.tags)) as string[])
     .reduce((v, v1) => v.concat(v1), []);
   tags = [...new Set(tags)]
+  tags.sort()
   res.status(200).send({ message: JSON.stringify({ tags: tags }) });
 });
 
