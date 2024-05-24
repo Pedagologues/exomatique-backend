@@ -348,7 +348,7 @@ exercises_router.post("/edit/json", edition_middleware, async (req, res) => {
                   .parse(stream, { ignoreDuplicates: true });
 
                 if (result.errors.length > 0) {
-                  unlinkSync(pdf_path);
+                  if(fs.existsSync(pdf_path)) unlinkSync(pdf_path);
                   result.errors.forEach((item: any, index: any) => {
                     data.push({
                       row: item.line - 2,
