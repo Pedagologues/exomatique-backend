@@ -36,10 +36,16 @@ function now() {
   return Math.floor(Date.now() / 1000);
 }
 
-export async function verify(token: string): Promise<[string, string, number] | undefined> {
+export async function verify(
+  token: string
+): Promise<[string, string, number] | undefined> {
   const valide_token = await Accounts.findOne({ auth_token: token });
-  if(valide_token != null && (valide_token.auth_expire || 0) > now()){
-    return [token, valide_token._id.toHexString(), valide_token.auth_expire || 0];
+  if (valide_token != null && (valide_token.auth_expire || 0) > now()) {
+    return [
+      token,
+      valide_token._id.toHexString(),
+      valide_token.auth_expire || 0,
+    ];
   }
   return undefined;
 }
@@ -48,6 +54,7 @@ export async function token(
   username: string,
   password: string
 ): Promise<[string, string, number] | null> {
+  if (!password || !username) return null;
   const v = await Accounts.findOne({ username: username });
   if (v == null || !(await compare(password, v.password))) return null;
   if (v.auth_token == undefined || (v?.auth_expire || 0) <= now()) {
@@ -118,10 +125,7 @@ accounts_router.post("/register", async (req, res) => {
     if (isRegistered) res.status(201).send({ message: "Account created" });
     else res.status(401).send({ message: "A problem occured" });
   }
-  console.log(
-    "Someone is trying to register a new user : '%s'",
-    username
-  );
+  console.log("Someone is trying to register a new user : '%s'", username);
 });
 
 accounts_router.post("/login", async (req, res) => {
@@ -136,7 +140,12 @@ accounts_router.post("/login", async (req, res) => {
     if (token == null || !data)
       res.status(400).send({ message: "Could not login" });
     else {
-      res.status(201).json({ token: data[0], id:data[1], expiration: data[1] });
+      res.status(201).json({
+        name: username,
+        token: data[0],
+        id: data[1],
+        expiration: data[1],
+      });
     }
     return;
   }
@@ -145,9 +154,60 @@ accounts_router.post("/login", async (req, res) => {
 
   if (token_ == null) res.status(400).send({ message: "Could not login" });
   else
+    res.status(201).json({
+      username: username,
+      token: token_[0],
+      id: token_[1],
+      expiration: token_[2],
+    });
+});
+
+accounts_router.get("/availability/:s", async (req, res) => {
+  let isAvailable = await isUsernameAvailable(req.params.s || "");
+  res.status(200).json({ available: isAvailable });
+});
+
+accounts_router.post("/edit", async (req, res) => {
+  let username = req.body.username as string;
+  let password = req.body.password as string;
+
+  let modification = req.body.modification as any;
+  let newPassword = modification.password;
+
+  let old_token = await token(username, password);
+
+  if (old_token == null) {
+    res.status(400).send({ message: "Could not login" });
+    return;
+  }
+  modification["auth_token"] = undefined;
+  modification["auth_expire"] = undefined;
+  if (modification["password"])
+    modification["password"] = await hash(modification["password"]);
+
+  let ac = await Accounts.updateOne(
+    { username: username },
+    { $set: modification }
+  );
+
+  let newUsername = modification.username || username;
+  newPassword = newPassword || password;
+
+  let token_ = await token(newUsername, newPassword);
+
+  if (token_ == null) {
     res
-      .status(201)
-      .json({ token: token_[0], id: token_[1], expiration: token_[2] });
+      .status(400)
+      .send({ message: "Please report this to the administrator" });
+    return;
+  }
+
+  res.status(200).json({
+    username: newUsername,
+    token: token_[0],
+    id: token_[1],
+    expiration: token_[2],
+  });
 });
 
 export async function token_middleware(req: any, res: any, next: any) {
